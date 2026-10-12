@@ -1,0 +1,20 @@
+# Composer
+/vendor
+composer.lock
+
+# Caches and build output
+/build
+/coverage
+.phpunit.cache
+.phpunit.result.cache
+
+# Local overrides of the .dist files
+phpunit.xml
+phpstan.neon
+testbench.yaml
+
+# Editors and OS
+/.idea
+/.fleet
+/.vscode
+.DS_Store

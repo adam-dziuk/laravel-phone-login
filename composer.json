@@ -1,0 +1,67 @@
+{
+    "name": "adam-dziuk/laravel-phone-login",
+    "description": "Passwordless phone number login for Laravel: one SMS code signs people up and signs them in.",
+    "keywords": [
+        "laravel",
+        "authentication",
+        "passwordless",
+        "otp",
+        "sms",
+        "phone"
+    ],
+    "type": "library",
+    "license": "MIT",
+    "homepage": "https://github.com/adam-dziuk/laravel-phone-login",
+    "authors": [
+        {
+            "name": "Adam Dziuk",
+            "email": "adam.dziuk@ddsystems.pl",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "laravel/framework": "^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.14",
+        "orchestra/testbench": "^11.0",
+        "pestphp/pest": "^4.0||^5.1",
+        "pestphp/pest-plugin-laravel": "^4.0||^5.0",
+        "smsapi/php-client": "^4.0"
+    },
+    "suggest": {
+        "smsapi/php-client": "Required by the \"smsapi\" SMS driver (^4.0)."
+    },
+    "autoload": {
+        "psr-4": {
+            "AdamDziuk\\PhoneLogin\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AdamDziuk\\PhoneLogin\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "AdamDziuk\\PhoneLogin\\PhoneLoginServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "analyse": "phpstan analyse",
+        "format": "pint"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
