@@ -6,12 +6,14 @@ account. The package handles routes, controllers, validation, throttling and
 code storage, and ships no UI — you register your own views, the way Fortify
 does it.
 
+Requires PHP 8.3+ and Laravel 13.
+
 What it takes care of:
 
 - codes stored as hashes (the app's hasher, bcrypt by default), never in
   plain text;
 - a new code invalidates the previous one; a code dies after 5 wrong attempts
-  or 5 minutes;
+  or 5 minutes (both configurable);
 - a row lock, so two parallel requests cannot spend the same code;
 - throttling per number (normalised, so every spelling shares one bucket) and
   per IP;
@@ -28,35 +30,41 @@ php artisan vendor:publish --tag=phone-login-config
 php artisan vendor:publish --tag=phone-login-migrations
 ```
 
-Then pick where phone users live.
-
-**A table of their own (default).** With no `phone` guard in
-`config/auth.php`, the package registers one itself, backed by its
-`PhoneUser` model and a `customers` table — one row per verified number. If
-that name is taken, change `users.table` in `config/phone-login.php` before
-publishing the migration:
+Phone users get a table of their own, `customers`, kept apart from your staff
+accounts: one row per verified number, behind the package's `PhoneUser` model
+and `phone` guard. If that name is taken, change `users.table` in
+`config/phone-login.php` before you migrate:
 
 ```bash
 php artisan vendor:publish --tag=phone-login-users-migration
 php artisan migrate
 ```
 
-To add relations, extend `PhoneUser` and put the subclass in `users.model`.
-A `$table` set explicitly on the subclass wins over the config.
+To add relations, extend `PhoneUser` (say, as `Customer`) and put the subclass
+in `users.model`. A `$table` set explicitly on the subclass wins over the
+config.
 
-**A model of your own.** Define the guard and its provider in
-`config/auth.php` and set `guard` to its name — the package then leaves
-both alone and ignores the `users` keys. The model needs a unique `phone`
-column (E.164, `varchar(20)`) and, optionally, a nullable
-`phone_verified_at` timestamp. Column names are configurable. Skip the users
-migration and run `php artisan migrate`. Do not point `guard` at the staff
-guard: with `register_unknown` on, anyone with a phone would get a row in the
-staff table and a staff session.
+**Already have a customer model?** Skip the users migration. Add a session
+guard with an Eloquent provider for the model to `config/auth.php`, set
+`guard` in `config/phone-login.php` to that guard's name, and run
+`php artisan migrate`. The package leaves your guard alone and ignores
+`users.table` and `users.model`. The model's table needs:
 
-Schedule pruning — `model:prune` only looks into `app/Models` by default:
+- `phone` — unique `varchar(20)`, holds E.164 numbers;
+- `phone_verified_at` — nullable timestamp, or set `columns.verified_at` to
+  `null`;
+- `remember_token`.
+
+`columns` renames the first two. Other required columns need a value from
+[`createUsersUsing`](#hooks). Do not use your staff guard here: with
+`register_unknown` on, anyone with a phone would get a staff account.
+
+Schedule pruning in `routes/console.php` — `model:prune` only looks into
+`app/Models` by default:
 
 ```php
 use AdamDziuk\PhoneLogin\Models\PhoneLoginCode;
+use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('model:prune', ['--model' => [PhoneLoginCode::class]])->daily();
 ```
@@ -73,13 +81,15 @@ Schedule::command('model:prune', ['--model' => [PhoneLoginCode::class]])->daily(
 | `routes.prefix` / `routes.name` | `phone` / `phone-login.` | URL prefix and route name prefix |
 | `home` | `/` | redirect after login |
 | `register_unknown` | `true` | `false` = login only, unknown numbers get no SMS |
+| `remember` | `true` | remember-me cookie; needs a `remember_token` column |
+| `phone.default_prefix` / `phone.national_length` | `48` / `9` | country code put in front of a number with exactly that many digits |
 | `phone.allowed_prefixes` | `['48']` | country calling codes that may receive codes; `null` = any |
-| `sms.driver` | `log` | `log` or `smsapi` |
+| `sms.driver` | `log` | `log` or `smsapi`; set with `PHONE_LOGIN_SMS_DRIVER` |
 
 The per-IP limits count `$request->ip()`. Behind a load balancer or CDN,
-configure trusted proxies: without them every visitor shares the proxy's
-address and one busy hour locks everyone out, while trusting `*` where clients
-can reach the app directly lets them pick their own address in
+configure trusted proxies — without them every visitor shares the proxy's
+address, and one busy hour locks everyone out. Do not trust `*` where clients
+can reach the app directly: they could pick their own address in
 `X-Forwarded-For`.
 
 Routes, with the default prefix and names:
@@ -105,8 +115,26 @@ PhoneLogin::loginView(fn () => Inertia::render('auth/phone-login'));
 PhoneLogin::codeView(fn (string $phone) => Inertia::render('auth/phone-code', ['phone' => $phone]));
 ```
 
-The login form posts `phone`; the code form posts `code`. Errors come back on
-those two keys.
+The login form posts `phone`; the code form posts `code`. Validation errors
+come back on those two keys, plus any fields you add with
+[`sendCodeRules`](#hooks). Going over a rate limit returns a 429 response, not
+a form error; to show it on the form, add to `bootstrap/app.php`:
+
+```php
+use AdamDziuk\PhoneLogin\PhoneLogin;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use Illuminate\Http\Request;
+
+->withExceptions(function (Exceptions $exceptions): void {
+    $exceptions->render(function (ThrottleRequestsException $exception, Request $request) {
+        if ($request->routeIs(PhoneLogin::route('*'))) {
+            $field = $request->routeIs(PhoneLogin::route('code.store')) ? 'code' : 'phone';
+
+            return back()->withErrors([$field => 'Too many attempts. Try again later.']);
+        }
+    });
+})
+```
 
 ## Next to staff accounts
 
@@ -151,24 +179,39 @@ PhoneLogin::sendCodeRules(
 );
 ```
 
-Building new users when your table has required columns beyond the phone —
+Building new users when their table has required columns beyond the phone —
 return the model unsaved, the package fills in the phone and saves it:
 
 ```php
-PhoneLogin::createUsersUsing(fn (string $phone) => new User(['name' => 'Guest']));
+PhoneLogin::createUsersUsing(fn (string $phone) => (new Customer)->forceFill(['name' => 'Guest']));
 ```
 
 After a successful verification the package dispatches
-`AdamDziuk\PhoneLogin\Events\PhoneVerified` (`$user`, `$registered`). It fires
-**inside the login transaction**: a synchronous listener commits or rolls back
-together with the login, so if it throws, the code stays unused and no user is
-created.
+`AdamDziuk\PhoneLogin\Events\PhoneVerified` (`$user`, `$registered`), before
+logging the user in. It fires **inside the login transaction**: a synchronous
+listener commits or rolls back together with it, so if it throws, the code
+stays unused and no user is created.
 
 ## SMS
 
-`log` writes the message to the default log channel — handy locally. `smsapi`
-needs `smsapi/php-client` and `SMSAPI_TOKEN` (optionally `SMSAPI_FROM`). For any
-other provider, bind your own implementation:
+`log`, the default driver, writes each message to the app's log — handy
+locally. For SMSAPI:
+
+```bash
+composer require "smsapi/php-client:^4.0"
+```
+
+```dotenv
+PHONE_LOGIN_SMS_DRIVER=smsapi
+SMSAPI_TOKEN=your-api-token
+SMSAPI_FROM=YourBrand
+```
+
+`SMSAPI_FROM` is optional: a sender name registered with SMSAPI. An
+smsapi.com account (rather than smsapi.pl) also needs `sms.smsapi.service` set
+to `com`.
+
+For any other provider, bind your own implementation:
 
 ```php
 use AdamDziuk\PhoneLogin\Contracts\SmsSender;
@@ -178,6 +221,17 @@ $this->app->bind(SmsSender::class, TwilioSender::class);
 
 `send()` runs synchronously and throws `SmsDeliveryFailed` on failure, so the
 form can show an error instead of a 500.
+
+The SMS text and the form errors come in English and Polish. To change them,
+publish them to `lang/vendor/phone-login`:
+
+```bash
+php artisan vendor:publish --tag=phone-login-lang
+```
+
+With SMSAPI, keep the SMS in GSM-7 — no `ą`, `ę`, `ó` and the like.
+`sms.smsapi.no_unicode` (on by default) makes SMSAPI reject anything else, and
+the form then shows a delivery error.
 
 ## Testing your app
 
