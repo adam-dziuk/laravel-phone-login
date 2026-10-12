@@ -79,7 +79,7 @@ Schedule::command('model:prune', ['--model' => [PhoneLoginCode::class]])->daily(
 | `users.table` | `customers` | table of verified numbers, behind the package's own `PhoneUser` model |
 | `users.model` | `PhoneUser` | model behind the package's guard |
 | `routes.prefix` / `routes.name` | `phone` / `phone-login.` | URL prefix and route name prefix |
-| `home` | `/` | redirect after login |
+| `home` | `/` | redirect after login when no page is waiting for it |
 | `register_unknown` | `true` | `false` = login only, unknown numbers get no SMS |
 | `remember` | `true` | remember-me cookie; needs a `remember_token` column |
 | `phone.default_prefix` / `phone.national_length` | `48` / `9` | country code put in front of a number with exactly that many digits |
@@ -158,15 +158,30 @@ use Illuminate\Http\Request;
 ->withExceptions(function (Exceptions $exceptions): void {
     $exceptions->render(function (AuthenticationException $exception, Request $request) {
         if (! $request->expectsJson() && in_array(PhoneLogin::guard(), $exception->guards(), true)) {
-            return redirect()->route(PhoneLogin::route('login'));
+            return redirect()->guest(route(PhoneLogin::route('login')));
         }
     });
 })
 ```
 
-A plain redirect, not `redirect()->guest()`: the phone login always lands on
-`home`, never on the intended URL, because that session key is shared with the
-staff login. One stored here would only greet the next staff login.
+`redirect()->guest()` remembers the page, so logging in leads back to it — say,
+an order linked in an SMS — and to `home` only when no page is waiting.
+Laravel keeps that page under one session key for all guards: in a browser
+shared with a staff login, the next login on either side takes whatever page
+the other one left behind.
+
+Laravel works out the staff redirect, `route('login')`, before this handler
+runs. Without a `login` route — say, with phone users only — point every guest
+at the phone form instead and skip the handler; Laravel then remembers the page
+itself:
+
+```php
+use AdamDziuk\PhoneLogin\PhoneLogin;
+
+->withMiddleware(function (Middleware $middleware): void {
+    $middleware->redirectGuestsTo(fn () => route(PhoneLogin::route('login')));
+})
+```
 
 ## Hooks
 
@@ -233,6 +248,44 @@ With SMSAPI, keep the SMS in GSM-7 — no `ą`, `ę`, `ó` and the like.
 `sms.smsapi.no_unicode` (on by default) makes SMSAPI reject anything else, and
 the form then shows a delivery error.
 
+## Messages
+
+Phone users can be texted through the same SMS driver as the login codes, e.g.
+from an admin panel:
+
+```php
+$customer->sendMessage('Your order is ready: '.route('orders.show', $order));
+```
+
+`PhoneUser` and its subclasses can do it out of the box. A model of your own
+needs the trait:
+
+```php
+use AdamDziuk\PhoneLogin\Concerns\ReceivesSms;
+
+class Customer extends Authenticatable
+{
+    use ReceivesSms;
+}
+```
+
+The number comes from the `columns.phone` column; a model without one throws a
+`LogicException` rather than skipping the message. The SMS goes out at once,
+with no queue and no retries, and a failed delivery throws `SmsDeliveryFailed`
+for your code to handle. A link to a page behind `auth:phone` brings someone
+logged out back to it after the login — see
+[Next to staff accounts](#next-to-staff-accounts).
+
+**With SMSAPI, strip the diacritics first.** `no_unicode` makes SMSAPI reject
+any text outside GSM-7, so "Zamówienie zostało wysłane" fails with
+`SmsDeliveryFailed`. `Str::ascii()` turns it into "Zamowienie zostalo wyslane":
+
+```php
+use Illuminate\Support\Str;
+
+$customer->sendMessage(Str::ascii($text));
+```
+
 ## Testing your app
 
 ```php
@@ -243,6 +296,9 @@ $sms = FakeSmsSender::bind();
 $this->post(route('phone-login.login.store'), ['phone' => '060 000 002']);
 $this->post(route('phone-login.code.store'), ['code' => $sms->lastCode()]);
 ```
+
+The fake catches [messages](#messages) too: each one lands in `$sms->sent` as
+`['phone' => …, 'message' => …]`.
 
 ## Limitations
 

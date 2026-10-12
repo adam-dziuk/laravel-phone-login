@@ -2,6 +2,7 @@
 
 namespace AdamDziuk\PhoneLogin\Models;
 
+use AdamDziuk\PhoneLogin\Concerns\ReceivesSms;
 use AdamDziuk\PhoneLogin\PhoneLogin;
 use Carbon\CarbonInterface;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -20,6 +21,8 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
  */
 class PhoneUser extends Authenticatable
 {
+    use ReceivesSms;
+
     protected $hidden = ['remember_token'];
 
     /**

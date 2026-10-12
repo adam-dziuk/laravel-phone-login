@@ -44,3 +44,17 @@ test('createUsersUsing builds the model for a new number', function () {
 
     expect(User::query()->sole()->name)->toBe('Guest 002');
 });
+
+test('a model of the app own is texted once it uses the trait', function () {
+    User::query()->forceCreate(['phone' => '+48060000002'])->sendMessage('Hello');
+
+    expect($this->sms->sent)->toBe([['phone' => '+48060000002', 'message' => 'Hello']]);
+});
+
+test('a user without a number throws instead of skipping the message', function () {
+    $user = User::query()->forceCreate(['name' => 'No phone']);
+
+    expect(fn () => $user->sendMessage('Hello'))->toThrow(LogicException::class, 'no phone number in its [phone] column');
+
+    expect($this->sms->sent)->toBeEmpty();
+});

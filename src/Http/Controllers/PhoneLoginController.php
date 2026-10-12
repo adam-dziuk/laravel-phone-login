@@ -69,7 +69,7 @@ class PhoneLoginController extends Controller
 
         PhoneLogin::auth()->login($user, remember: (bool) config('phone-login.remember'));
 
-        return redirect((string) config('phone-login.home'));
+        return redirect()->intended((string) config('phone-login.home'));
     }
 
     /**
