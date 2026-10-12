@@ -85,8 +85,10 @@ return [
     | Home
     |--------------------------------------------------------------------------
     |
-    | Where people land after logging in, and where the login form sends
-    | someone already logged in on this guard.
+    | Where people land after logging in when no page is waiting for them —
+    | one that sent them to the login form with redirect()->guest() gets them
+    | back instead. Also where the login form sends someone already logged in
+    | on this guard.
     |
     */
 

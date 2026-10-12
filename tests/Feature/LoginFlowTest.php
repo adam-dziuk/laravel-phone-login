@@ -5,6 +5,8 @@ use AdamDziuk\PhoneLogin\Exceptions\SmsDeliveryFailed;
 use AdamDziuk\PhoneLogin\Models\PhoneLoginCode;
 use AdamDziuk\PhoneLogin\Models\PhoneUser;
 use AdamDziuk\PhoneLogin\Testing\FakeSmsSender;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
@@ -88,6 +90,31 @@ test('an existing user logs into their own account', function () {
     expect(PhoneUser::query()->count())->toBe(1)
         ->and($user->fresh()->phone_verified_at->equalTo($verifiedAt))->toBeTrue();
     $this->assertAuthenticatedAs($user->fresh(), 'phone');
+});
+
+test('logging in leads back to the page that sent the guest to the login form', function () {
+    // Laravel builds the redirect to the staff login before any handler runs.
+    Route::get('login', fn () => 'staff login form')->name('login');
+    Route::middleware(['web', 'auth:phone'])->get('orders/{order}', fn (string $order) => "order {$order}");
+    Route::getRoutes()->refreshNameLookups();
+    // The handler the README puts in bootstrap/app.php.
+    app(ExceptionHandler::class)->renderable(fn (AuthenticationException $exception) => redirect()->guest(route('phone-login.login')));
+
+    $this->get('/orders/123')->assertRedirect(route('phone-login.login'));
+
+    sendCode();
+    verifyCode($this->sms->lastCode())->assertRedirect('/orders/123');
+
+    $this->get('/orders/123')->assertOk()->assertSee('order 123');
+});
+
+test('the page waiting for the login survives a wrong code', function () {
+    $this->withSession(['url.intended' => url('/orders/123')]);
+
+    sendCode();
+    verifyCode('000000')->assertSessionHasErrors('code');
+
+    verifyCode($this->sms->lastCode())->assertRedirect('/orders/123');
 });
 
 test('a wrong code does not log in and counts an attempt', function () {
