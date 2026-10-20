@@ -137,12 +137,14 @@ return [
     |
     | Sending is limited per hour, verifying per minute. The per-phone bucket
     | is keyed by the normalised number, so "060 000 002" and "+48060000002"
-    | share it.
+    | share it. "send_per_phone_per_day" caps the codes one number gets in a
+    | day, and with them the guesses anyone can make at it; null lifts it.
     |
     */
 
     'throttle' => [
         'send_per_phone' => 3,
+        'send_per_phone_per_day' => 10,
         'send_per_ip' => 15,
         'verify_per_ip' => 6,
     ],

@@ -69,7 +69,7 @@ class PhoneLoginController extends Controller
 
         PhoneLogin::auth()->login($user, remember: (bool) config('phone-login.remember'));
 
-        return redirect()->intended((string) config('phone-login.home'));
+        return redirect($this->intendedUrl($request));
     }
 
     /**
@@ -89,6 +89,34 @@ class PhoneLoginController extends Controller
         }
 
         return to_route(PhoneLogin::route('login'));
+    }
+
+    /**
+     * The page that sent the guest to the login form, else home. For anything
+     * but a GET, guest() stores the Referer instead — a HEAD request from
+     * another site included — so only a URL under this app's root is followed.
+     * The "/" or "?" after the root keeps out hosts that merely start like it.
+     */
+    private function intendedUrl(Request $request): string
+    {
+        $home = (string) config('phone-login.home');
+        $intended = $request->session()->pull('url.intended');
+
+        if (! is_string($intended)) {
+            return $home;
+        }
+
+        $url = url($intended);
+
+        // guest() builds its URL from the request; url() and route() use a
+        // root the app may have forced, e.g. to https behind a proxy.
+        foreach ([$request->root(), url('/')] as $root) {
+            if ($url === $root || str_starts_with($url, $root.'/') || str_starts_with($url, $root.'?')) {
+                return $url;
+            }
+        }
+
+        return $home;
     }
 
     private function render(?Closure $view, string $hook, mixed ...$arguments): mixed

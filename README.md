@@ -15,8 +15,8 @@ What it takes care of:
 - a new code invalidates the previous one; a code dies after 5 wrong attempts
   or 5 minutes (both configurable);
 - a row lock, so two parallel requests cannot spend the same code;
-- throttling per number (normalised, so every spelling shares one bucket) and
-  per IP;
+- throttling per IP and per number — normalised, so every spelling shares one
+  bucket, and capped at 3 codes an hour and 10 a day;
 - an allow-list of country calling codes against SMS pumping;
 - pruning of stored numbers and IP addresses after 30 days;
 - an optional "login only" mode in which unknown numbers get no SMS and the
@@ -85,6 +85,11 @@ Schedule::command('model:prune', ['--model' => [PhoneLoginCode::class]])->daily(
 | `phone.default_prefix` / `phone.national_length` | `48` / `9` | country code put in front of a number with exactly that many digits |
 | `phone.allowed_prefixes` | `['48']` | country calling codes that may receive codes; `null` = any |
 | `sms.driver` | `log` | `log` or `smsapi`; set with `PHONE_LOGIN_SMS_DRIVER` |
+
+A number gets at most 3 codes an hour (`throttle.send_per_phone`) and 10 a day
+(`throttle.send_per_phone_per_day`), which bounds how many guesses anyone can
+make at it. A config published before the daily cap existed has no such key
+and gets 10 as well; set the key to `null` to lift the cap.
 
 The per-IP limits count `$request->ip()`. Behind a load balancer or CDN,
 configure trusted proxies — without them every visitor shares the proxy's
@@ -165,10 +170,11 @@ use Illuminate\Http\Request;
 ```
 
 `redirect()->guest()` remembers the page, so logging in leads back to it — say,
-an order linked in an SMS — and to `home` only when no page is waiting.
-Laravel keeps that page under one session key for all guards: in a browser
-shared with a staff login, the next login on either side takes whatever page
-the other one left behind.
+an order linked in an SMS — and to `home` when no page is waiting. Only a page
+of this app counts: for anything but a GET, Laravel remembers the `Referer`,
+which may point at another site. Laravel keeps that page under one session key
+for all guards: in a browser shared with a staff login, the next login on
+either side takes whatever page the other one left behind.
 
 Laravel works out the staff redirect, `route('login')`, before this handler
 runs. Without a `login` route — say, with phone users only — point every guest
@@ -209,8 +215,9 @@ stays unused and no user is created.
 
 ## SMS
 
-`log`, the default driver, writes each message to the app's log — handy
-locally. For SMSAPI:
+`log`, the default driver, writes each message to the app's log. Use it for
+local work only: the log then holds every login code in plain text. For
+SMSAPI:
 
 ```bash
 composer require "smsapi/php-client:^4.0"
