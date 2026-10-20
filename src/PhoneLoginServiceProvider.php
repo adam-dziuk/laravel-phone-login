@@ -80,10 +80,20 @@ class PhoneLoginServiceProvider extends ServiceProvider
             $input = $request->input('phone');
             $phone = is_string($input) ? ($this->app->make(PhoneNumber::class)->normalise($input) ?? $input) : '';
 
-            return [
+            $limits = [
                 Limit::perHour((int) config('phone-login.throttle.send_per_phone'))->by('phone:'.$phone),
                 Limit::perHour((int) config('phone-login.throttle.send_per_ip'))->by('ip:'.$request->ip()),
             ];
+
+            // A config published before the daily cap has no such key and gets
+            // the default; only an explicit null lifts the cap.
+            $perDay = config('phone-login.throttle.send_per_phone_per_day', 10);
+
+            if ($perDay !== null) {
+                $limits[] = Limit::perDay((int) $perDay)->by('phone-day:'.$phone);
+            }
+
+            return $limits;
         });
 
         RateLimiter::for('phone-login-verify', fn (Request $request): Limit => Limit::perMinute((int) config('phone-login.throttle.verify_per_ip'))

@@ -117,6 +117,39 @@ test('the page waiting for the login survives a wrong code', function () {
     verifyCode($this->sms->lastCode())->assertRedirect('/orders/123');
 });
 
+test('a page of the app is followed however it was stored', function (string $intended) {
+    $this->withSession(['url.intended' => $intended]);
+
+    sendCode();
+    verifyCode($this->sms->lastCode())->assertRedirect(url($intended));
+})->with([
+    'a path' => '/orders/123',
+    'the home page with a query' => 'http://localhost?tab=orders',
+]);
+
+test('a page outside the app is not followed after the login', function (string $intended) {
+    $this->withSession(['url.intended' => $intended]);
+
+    sendCode();
+    verifyCode($this->sms->lastCode())->assertRedirect('/home');
+})->with([
+    'another site' => 'https://evil.example/phish',
+    'a host that merely starts like this one' => 'http://localhost.evil.example/orders/123',
+    'a protocol-relative URL' => '//evil.example/orders/123',
+]);
+
+test('a HEAD request from another site does not choose the page after the login', function () {
+    Route::get('login', fn () => 'staff login form')->name('login');
+    Route::middleware(['web', 'auth:phone'])->get('orders/{order}', fn (string $order) => "order {$order}");
+    Route::getRoutes()->refreshNameLookups();
+
+    // For anything but a GET, guest() stores the Referer as the page to return to.
+    $this->call('HEAD', '/orders/123', server: ['HTTP_REFERER' => 'https://evil.example/phish']);
+
+    sendCode();
+    verifyCode($this->sms->lastCode())->assertRedirect('/home');
+});
+
 test('a wrong code does not log in and counts an attempt', function () {
     sendCode();
 
@@ -192,6 +225,39 @@ test('sending is throttled per number, whatever the spelling', function () {
     sendCode('0048060000002');
 
     sendCode('060-000-002')->assertTooManyRequests();
+});
+
+test('a number gets at most ten codes a day', function () {
+    foreach (range(1, 10) as $hour) {
+        sendCode()->assertRedirect(route('phone-login.code'));
+        $this->travel(1)->hours();
+    }
+
+    sendCode()->assertTooManyRequests();
+
+    $this->travel(15)->hours();
+
+    sendCode()->assertRedirect(route('phone-login.code'));
+});
+
+test('a config published before the daily cap gets it too', function () {
+    config()->set('phone-login.throttle', ['send_per_phone' => 3, 'send_per_ip' => 15, 'verify_per_ip' => 6]);
+
+    foreach (range(1, 10) as $hour) {
+        sendCode()->assertRedirect(route('phone-login.code'));
+        $this->travel(1)->hours();
+    }
+
+    sendCode()->assertTooManyRequests();
+});
+
+test('null lifts the daily cap', function () {
+    config()->set('phone-login.throttle.send_per_phone_per_day', null);
+
+    foreach (range(1, 11) as $hour) {
+        sendCode()->assertRedirect(route('phone-login.code'));
+        $this->travel(1)->hours();
+    }
 });
 
 test('a failed delivery shows an error instead of a server error', function () {
