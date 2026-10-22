@@ -13,16 +13,18 @@ class SendLoginCode
     public function __construct(private readonly SmsSender $sms) {}
 
     /**
-     * With registration off, an unknown number returns silently: the caller
+     * Returns the code it sent, so the caller can tie it to the login.
+     *
+     * With registration off, an unknown number returns null: the caller
      * gives the same response as for a known one, and no SMS is paid for. It
      * returns sooner, without hashing or sending, which timing can reveal.
      *
      * @throws SmsDeliveryFailed
      */
-    public function handle(string $phone, ?string $ip = null): void
+    public function handle(string $phone, ?string $ip = null): ?PhoneLoginCode
     {
         if (! config('phone-login.register_unknown') && ! $this->hasAccount($phone)) {
-            return;
+            return null;
         }
 
         $ttl = (int) config('phone-login.code.ttl');
@@ -33,17 +35,21 @@ class SendLoginCode
             ->whereNull('consumed_at')
             ->update(['consumed_at' => now()]);
 
-        (new PhoneLoginCode)->forceFill([
+        $login = (new PhoneLoginCode)->forceFill([
             'phone' => $phone,
             'code_hash' => Hash::make($code),
             'expires_at' => now()->addMinutes($ttl),
             'ip' => $ip,
-        ])->save();
+        ]);
+
+        $login->save();
 
         $this->sms->send($phone, PhoneLogin::message('sms', [
             'code' => $code,
             'minutes' => $ttl,
         ]));
+
+        return $login;
     }
 
     private function hasAccount(string $phone): bool

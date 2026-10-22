@@ -140,12 +140,18 @@ return [
     | share it. "send_per_phone_per_day" caps the codes one number gets in a
     | day, and with them the guesses anyone can make at it; null lifts it.
     |
+    | "send_global_per_hour" caps the codes the whole app sends in an hour,
+    | so a flood spread over many numbers and addresses cannot drain the SMS
+    | balance. Set it above your busiest hour: past it, nobody gets a code
+    | until the hour is up. null leaves it off.
+    |
     */
 
     'throttle' => [
         'send_per_phone' => 3,
         'send_per_phone_per_day' => 10,
         'send_per_ip' => 15,
+        'send_global_per_hour' => null,
         'verify_per_ip' => 6,
     ],
 

@@ -19,6 +19,8 @@ class PhoneLoginController extends Controller
 {
     private const SESSION_KEY = 'phone_login';
 
+    private const CODE_SESSION_KEY = 'phone_login_code';
+
     public function create(Request $request): mixed
     {
         return $this->render(PhoneLogin::hooks()->loginView, 'loginView', $request);
@@ -29,12 +31,13 @@ class PhoneLoginController extends Controller
         $phone = (string) $request->input('phone');
 
         try {
-            $action->handle($phone, $request->ip());
+            $login = $action->handle($phone, $request->ip());
         } catch (SmsDeliveryFailed) {
             return back()->withErrors(['phone' => PhoneLogin::message('delivery_failed')]);
         }
 
         $request->session()->put(self::SESSION_KEY, $phone);
+        $request->session()->put(self::CODE_SESSION_KEY, $login?->getKey());
 
         return to_route(PhoneLogin::route('code'));
     }
@@ -59,12 +62,12 @@ class PhoneLoginController extends Controller
         }
 
         try {
-            $user = $action->handle($phone, (string) $request->input('code'));
+            $user = $action->handle($phone, (string) $request->input('code'), $this->sentCode($request));
         } catch (InvalidLoginCode) {
             return back()->withErrors(['code' => PhoneLogin::message('invalid_code')]);
         }
 
-        $request->session()->forget(self::SESSION_KEY);
+        $request->session()->forget([self::SESSION_KEY, self::CODE_SESSION_KEY]);
         $request->session()->regenerate();
 
         PhoneLogin::auth()->login($user, remember: (bool) config('phone-login.remember'));
@@ -89,6 +92,24 @@ class PhoneLoginController extends Controller
         }
 
         return to_route(PhoneLogin::route('login'));
+    }
+
+    /**
+     * The code sent to this session, never the newest one for the number:
+     * that may be another session's, whose attempts this one would use up.
+     * There is none for an unknown number with registration off.
+     *
+     * @throws InvalidLoginCode
+     */
+    private function sentCode(Request $request): int
+    {
+        $id = $request->session()->get(self::CODE_SESSION_KEY);
+
+        if (! is_int($id)) {
+            throw new InvalidLoginCode;
+        }
+
+        return $id;
     }
 
     /**

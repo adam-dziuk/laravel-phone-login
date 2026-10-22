@@ -219,6 +219,42 @@ test('a new code invalidates the previous one', function () {
     $this->assertGuest('phone');
 });
 
+test('wrong guesses from another session leave the code of this one alone', function () {
+    // Another browser starts a login for the same number first...
+    sendCode();
+    $elsewhere = session()->all();
+
+    // ...then the customer asks for a code of their own.
+    session()->flush();
+    sendCode();
+    $code = $this->sms->lastCode();
+    $mine = session()->all();
+
+    session()->flush();
+    session()->put($elsewhere);
+
+    foreach (range(1, 5) as $guess) {
+        verifyCode('000000')->assertSessionHasErrors('code');
+    }
+
+    session()->flush();
+    session()->put($mine);
+
+    verifyCode($code)->assertRedirect('/home');
+});
+
+test('a session that holds no code of its own cannot verify one', function () {
+    sendCode();
+    $code = $this->sms->lastCode();
+
+    // As a session started before codes were tied to it would look.
+    session()->forget('phone_login_code');
+
+    verifyCode($code)->assertSessionHasErrors('code');
+
+    $this->assertGuest('phone');
+});
+
 test('sending is throttled per number, whatever the spelling', function () {
     sendCode('+48060000002');
     sendCode('060 000 002');
@@ -238,6 +274,18 @@ test('a number gets at most ten codes a day', function () {
     $this->travel(15)->hours();
 
     sendCode()->assertRedirect(route('phone-login.code'));
+});
+
+test('the whole app sends at most send_global_per_hour codes an hour', function () {
+    config()->set('phone-login.throttle.send_global_per_hour', 2);
+
+    sendCode('+48060000002')->assertRedirect(route('phone-login.code'));
+    sendCode('+48060000003')->assertRedirect(route('phone-login.code'));
+    sendCode('+48060000004')->assertTooManyRequests();
+
+    $this->travel(1)->hours();
+
+    sendCode('+48060000004')->assertRedirect(route('phone-login.code'));
 });
 
 test('a config published before the daily cap gets it too', function () {

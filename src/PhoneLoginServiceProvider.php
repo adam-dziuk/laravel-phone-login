@@ -93,6 +93,14 @@ class PhoneLoginServiceProvider extends ServiceProvider
                 $limits[] = Limit::perDay((int) $perDay)->by('phone-day:'.$phone);
             }
 
+            // Off unless set: no default would suit every app. It counts
+            // attempts, not delivered SMS.
+            $global = config('phone-login.throttle.send_global_per_hour');
+
+            if ($global !== null) {
+                $limits[] = Limit::perHour((int) $global)->by('global');
+            }
+
             return $limits;
         });
 

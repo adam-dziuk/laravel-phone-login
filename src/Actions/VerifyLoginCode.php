@@ -17,12 +17,16 @@ class VerifyLoginCode
      * Signing up and signing in are the same path — an unknown number that
      * verifies gets an account, unless registration is turned off.
      *
+     * With $codeId only that code is checked, else the newest live code for
+     * the number.
+     *
      * @throws InvalidLoginCode
      */
-    public function handle(string $phone, string $code): Authenticatable&Model
+    public function handle(string $phone, string $code, ?int $codeId = null): Authenticatable&Model
     {
         $login = PhoneLoginCode::query()
             ->where('phone', $phone)
+            ->when($codeId !== null, fn ($query) => $query->whereKey($codeId))
             ->whereNull('consumed_at')
             ->where('expires_at', '>', now())
             ->latest('id')
