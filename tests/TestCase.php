@@ -27,6 +27,9 @@ abstract class TestCase extends BaseTestCase
 
     protected function defineEnvironment($app): void
     {
+        // The web middleware encrypts the session cookie.
+        $app['config']->set('app.key', 'base64:1yThEf5KhHYdOHakueaOIjjPONjKLP/eMOJivMXVPr8=');
+
         $app['config']->set('phone-login.users.table', 'sms_clients');
         $app['config']->set('phone-login.home', '/home');
         $app['config']->set('hashing.bcrypt.rounds', 4);

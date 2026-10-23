@@ -106,13 +106,6 @@ final class PhoneLogin
         return is_string($table) && $table !== '' ? $table : 'customers';
     }
 
-    public static function column(string $name): ?string
-    {
-        $column = config("phone-login.columns.{$name}");
-
-        return is_string($column) && $column !== '' ? $column : null;
-    }
-
     /**
      * The model behind the guard's user provider.
      *

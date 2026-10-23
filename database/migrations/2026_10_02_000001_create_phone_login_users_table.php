@@ -15,12 +15,8 @@ return new class extends Migration
     {
         Schema::create(PhoneLogin::usersTable(), function (Blueprint $table) {
             $table->id();
-            $table->string((string) PhoneLogin::column('phone'), 20)->unique();
-
-            if (PhoneLogin::column('verified_at') !== null) {
-                $table->timestamp(PhoneLogin::column('verified_at'))->nullable();
-            }
-
+            $table->string('phone', 20)->unique();
+            $table->timestamp('phone_verified_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

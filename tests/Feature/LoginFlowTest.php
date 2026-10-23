@@ -62,7 +62,7 @@ test('refuses countries outside the allowed prefixes', function () {
 });
 
 test('allows any country when allowed prefixes is null', function () {
-    config()->set('phone-login.phone.allowed_prefixes', null);
+    config()->set('phone-login.allowed_prefixes', null);
 
     sendCode('+1 202 555 0143')->assertRedirect(route('phone-login.code'));
 
@@ -219,6 +219,42 @@ test('a new code invalidates the previous one', function () {
     $this->assertGuest('phone');
 });
 
+test('wrong guesses from another session leave the code of this one alone', function () {
+    // Another browser starts a login for the same number first...
+    sendCode();
+    $elsewhere = session()->all();
+
+    // ...then the customer asks for a code of their own.
+    session()->flush();
+    sendCode();
+    $code = $this->sms->lastCode();
+    $mine = session()->all();
+
+    session()->flush();
+    session()->put($elsewhere);
+
+    foreach (range(1, 5) as $guess) {
+        verifyCode('000000')->assertSessionHasErrors('code');
+    }
+
+    session()->flush();
+    session()->put($mine);
+
+    verifyCode($code)->assertRedirect('/home');
+});
+
+test('a session that holds no code of its own cannot verify one', function () {
+    sendCode();
+    $code = $this->sms->lastCode();
+
+    // As a session started before codes were tied to it would look.
+    session()->forget('phone_login_code');
+
+    verifyCode($code)->assertSessionHasErrors('code');
+
+    $this->assertGuest('phone');
+});
+
 test('sending is throttled per number, whatever the spelling', function () {
     sendCode('+48060000002');
     sendCode('060 000 002');
@@ -240,24 +276,16 @@ test('a number gets at most ten codes a day', function () {
     sendCode()->assertRedirect(route('phone-login.code'));
 });
 
-test('a config published before the daily cap gets it too', function () {
-    config()->set('phone-login.throttle', ['send_per_phone' => 3, 'send_per_ip' => 15, 'verify_per_ip' => 6]);
+test('the whole app sends at most codes_per_hour codes an hour', function () {
+    config()->set('phone-login.codes_per_hour', 2);
 
-    foreach (range(1, 10) as $hour) {
-        sendCode()->assertRedirect(route('phone-login.code'));
-        $this->travel(1)->hours();
-    }
+    sendCode('+48060000002')->assertRedirect(route('phone-login.code'));
+    sendCode('+48060000003')->assertRedirect(route('phone-login.code'));
+    sendCode('+48060000004')->assertTooManyRequests();
 
-    sendCode()->assertTooManyRequests();
-});
+    $this->travel(1)->hours();
 
-test('null lifts the daily cap', function () {
-    config()->set('phone-login.throttle.send_per_phone_per_day', null);
-
-    foreach (range(1, 11) as $hour) {
-        sendCode()->assertRedirect(route('phone-login.code'));
-        $this->travel(1)->hours();
-    }
+    sendCode('+48060000004')->assertRedirect(route('phone-login.code'));
 });
 
 test('a failed delivery shows an error instead of a server error', function () {

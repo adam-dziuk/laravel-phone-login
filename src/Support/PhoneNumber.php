@@ -3,8 +3,9 @@
 namespace AdamDziuk\PhoneLogin\Support;
 
 /**
- * Deliberately small: digits in, E.164 out. Apps that need per-country
- * validation can bind their own subclass in the container.
+ * Deliberately small: digits in, E.164 out, with a bare national number
+ * read as Polish. Apps that need per-country validation can bind their own
+ * subclass in the container.
  */
 class PhoneNumber
 {
@@ -14,19 +15,8 @@ class PhoneNumber
     public function __construct(
         private readonly string $defaultPrefix = '48',
         private readonly int $nationalLength = 9,
-        private readonly ?array $allowedPrefixes = null,
+        private readonly ?array $allowedPrefixes = ['48'],
     ) {}
-
-    public static function fromConfig(): self
-    {
-        $allowed = config('phone-login.phone.allowed_prefixes');
-
-        return new self(
-            (string) config('phone-login.phone.default_prefix'),
-            (int) config('phone-login.phone.national_length'),
-            is_array($allowed) ? array_values(array_map(strval(...), $allowed)) : null,
-        );
-    }
 
     /**
      * Normalise user input to E.164, assuming the default country when the

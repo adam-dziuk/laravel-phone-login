@@ -13,16 +13,22 @@ use Illuminate\Support\Facades\Hash;
 
 class VerifyLoginCode
 {
+    private const MAX_ATTEMPTS = 5;
+
     /**
      * Signing up and signing in are the same path — an unknown number that
      * verifies gets an account, unless registration is turned off.
      *
+     * With $codeId only that code is checked, else the newest live code for
+     * the number.
+     *
      * @throws InvalidLoginCode
      */
-    public function handle(string $phone, string $code): Authenticatable&Model
+    public function handle(string $phone, string $code, ?int $codeId = null): Authenticatable&Model
     {
         $login = PhoneLoginCode::query()
             ->where('phone', $phone)
+            ->when($codeId !== null, fn ($query) => $query->whereKey($codeId))
             ->whereNull('consumed_at')
             ->where('expires_at', '>', now())
             ->latest('id')
@@ -48,7 +54,7 @@ class VerifyLoginCode
     {
         return PhoneLoginCode::query()
             ->whereKey($login->getKey())
-            ->where('attempts', '<', (int) config('phone-login.code.max_attempts'))
+            ->where('attempts', '<', self::MAX_ATTEMPTS)
             ->increment('attempts') === 1;
     }
 
@@ -76,11 +82,8 @@ class VerifyLoginCode
      */
     private function user(string $phone): Authenticatable&Model
     {
-        $phoneColumn = (string) PhoneLogin::column('phone');
-        $verifiedColumn = PhoneLogin::column('verified_at');
-
         $model = PhoneLogin::userModel();
-        $user = $model::query()->where($phoneColumn, $phone)->first();
+        $user = $model::query()->where('phone', $phone)->first();
         $registered = $user === null;
 
         if ($user === null && ! config('phone-login.register_unknown')) {
@@ -89,13 +92,10 @@ class VerifyLoginCode
 
         $user = $user instanceof Authenticatable ? $user : PhoneLogin::newUser($phone);
 
-        $user->forceFill([$phoneColumn => $phone]);
-
-        if ($verifiedColumn !== null && $user->getAttribute($verifiedColumn) === null) {
-            $user->forceFill([$verifiedColumn => now()]);
-        }
-
-        $user->save();
+        $user->forceFill([
+            'phone' => $phone,
+            'phone_verified_at' => $user->getAttribute('phone_verified_at') ?? now(),
+        ])->save();
 
         event(new PhoneVerified($user, $registered));
 

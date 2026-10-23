@@ -30,14 +30,14 @@ class PhoneLoginCode extends Model
     protected $hidden = ['code_hash'];
 
     /**
-     * The phone number and IP address stay only as long as they help defend
-     * the login against abuse.
+     * The phone number and IP address stay for 30 days, as long as they help
+     * defend the login against abuse.
      *
      * @return Builder<static>
      */
     public function prunable(): Builder
     {
-        return static::query()->where('created_at', '<', now()->subDays((int) config('phone-login.prune_after_days')));
+        return static::query()->where('created_at', '<', now()->subDays(30));
     }
 
     /**
