@@ -72,10 +72,6 @@
 6. Send the codes through SMSAPI. Until then, the `log` driver writes them to
    the app's log:
 
-   ```bash
-   composer require "smsapi/php-client:^4.0"
-   ```
-
    ```dotenv
    PHONE_LOGIN_SMS_DRIVER=smsapi
    SMSAPI_TOKEN=your-api-token
