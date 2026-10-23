@@ -38,7 +38,6 @@ return [
     |--------------------------------------------------------------------------
     |
     | false: unknown numbers get the same response, but no SMS and no account.
-    | Read "Limitations" in the README before relying on it.
     |
     */
 
