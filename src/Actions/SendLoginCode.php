@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Hash;
 
 class SendLoginCode
 {
+    private const TTL_MINUTES = 5;
+
     public function __construct(private readonly SmsSender $sms) {}
 
     /**
@@ -27,7 +29,6 @@ class SendLoginCode
             return null;
         }
 
-        $ttl = (int) config('phone-login.code.ttl');
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
         PhoneLoginCode::query()
@@ -38,7 +39,7 @@ class SendLoginCode
         $login = (new PhoneLoginCode)->forceFill([
             'phone' => $phone,
             'code_hash' => Hash::make($code),
-            'expires_at' => now()->addMinutes($ttl),
+            'expires_at' => now()->addMinutes(self::TTL_MINUTES),
             'ip' => $ip,
         ]);
 
@@ -46,7 +47,7 @@ class SendLoginCode
 
         $this->sms->send($phone, PhoneLogin::message('sms', [
             'code' => $code,
-            'minutes' => $ttl,
+            'minutes' => self::TTL_MINUTES,
         ]));
 
         return $login;
@@ -56,6 +57,6 @@ class SendLoginCode
     {
         $model = PhoneLogin::userModel();
 
-        return $model::query()->where((string) PhoneLogin::column('phone'), $phone)->exists();
+        return $model::query()->where('phone', $phone)->exists();
     }
 }

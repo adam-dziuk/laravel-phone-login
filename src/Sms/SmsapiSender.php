@@ -11,15 +11,16 @@ use Smsapi\Client\Feature\Sms\Bag\SendSmsBag;
 use Smsapi\Client\Feature\Sms\SmsFeature;
 use Throwable;
 
+/**
+ * Sends through SMSAPI's top-priority channel, at 1.5 times the price, and in
+ * GSM-7 only: anything else is rejected instead of billed as UCS-2.
+ */
 class SmsapiSender implements SmsSender
 {
     public function __construct(
         private readonly string $token,
         private readonly ?string $from = null,
         private readonly string $service = 'pl',
-        private readonly bool $noUnicode = true,
-        private readonly bool $fast = true,
-        private readonly ?string $logChannel = null,
     ) {}
 
     /**
@@ -28,23 +29,19 @@ class SmsapiSender implements SmsSender
     public static function fromConfig(array $config): self
     {
         $from = (string) ($config['from'] ?? '');
-        $channel = (string) ($config['log_channel'] ?? '');
 
         return new self(
             token: (string) ($config['token'] ?? ''),
             from: $from === '' ? null : $from,
             service: (string) ($config['service'] ?? 'pl'),
-            noUnicode: (bool) ($config['no_unicode'] ?? true),
-            fast: (bool) ($config['fast'] ?? true),
-            logChannel: $channel === '' ? null : $channel,
         );
     }
 
     public function send(string $phone, string $message): void
     {
         $bag = SendSmsBag::withMessage($phone, $message);
-        $bag->noUnicode = $this->noUnicode;
-        $bag->fast = $this->fast;
+        $bag->noUnicode = true;
+        $bag->fast = true;
 
         if ($this->from !== null) {
             $bag->from = $this->from;
@@ -74,12 +71,11 @@ class SmsapiSender implements SmsSender
 
     /**
      * The whole number is logged, because without it nobody can tell whose
-     * code never arrived. Point log_channel at a channel with its own
-     * retention if that matters for your privacy policy.
+     * code never arrived.
      */
     private function report(string $phone, Throwable $exception): void
     {
-        Log::channel($this->logChannel)->error('SMSAPI rejected the message.', [
+        Log::error('SMSAPI rejected the message.', [
             'phone' => $phone,
             'from' => $this->from,
             'exception' => $exception::class,

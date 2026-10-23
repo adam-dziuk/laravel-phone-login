@@ -13,7 +13,7 @@ What it takes care of:
 - codes stored as hashes (the app's hasher, bcrypt by default), never in
   plain text;
 - a new code invalidates the previous one; a code dies after 5 wrong attempts
-  or 5 minutes (both configurable);
+  or 5 minutes;
 - a row lock, so two parallel requests cannot spend the same code;
 - throttling per IP and per number — normalised, so every spelling shares one
   bucket, and capped at 3 codes an hour and 10 a day;
@@ -51,13 +51,12 @@ guard with an Eloquent provider for the model to `config/auth.php`, set
 `users.table` and `users.model`. The model's table needs:
 
 - `phone` — unique `varchar(20)`, holds E.164 numbers;
-- `phone_verified_at` — nullable timestamp, or set `columns.verified_at` to
-  `null`;
+- `phone_verified_at` — nullable timestamp;
 - `remember_token`.
 
-`columns` renames the first two. Other required columns need a value from
-[`createUsersUsing`](#hooks). Do not use your staff guard here: with
-`register_unknown` on, anyone with a phone would get a staff account.
+Other required columns need a value from [`createUsersUsing`](#hooks). Do not
+use your staff guard here: with `register_unknown` on, anyone with a phone
+would get a staff account.
 
 Schedule pruning in `routes/console.php` — `model:prune` only looks into
 `app/Models` by default:
@@ -82,14 +81,11 @@ Schedule::command('model:prune', ['--model' => [PhoneLoginCode::class]])->daily(
 | `home` | `/` | redirect after login when no page is waiting for it |
 | `register_unknown` | `true` | `false` = login only, unknown numbers get no SMS |
 | `remember` | `true` | remember-me cookie; needs a `remember_token` column |
-| `phone.default_prefix` / `phone.national_length` | `48` / `9` | country code put in front of a number with exactly that many digits |
-| `phone.allowed_prefixes` | `['48']` | country calling codes that may receive codes; `null` = any |
+| `allowed_prefixes` | `['48']` | country calling codes that may receive codes; `null` = any |
 | `sms.driver` | `log` | `log` or `smsapi`; set with `PHONE_LOGIN_SMS_DRIVER` |
 
-A number gets at most 3 codes an hour (`throttle.send_per_phone`) and 10 a day
-(`throttle.send_per_phone_per_day`), which bounds how many guesses anyone can
-make at it. A config published before the daily cap existed has no such key
-and gets 10 as well; set the key to `null` to lift the cap.
+A number gets at most 3 codes an hour and 10 a day, which bounds how many
+guesses anyone can make at it.
 
 The per-IP limits count `$request->ip()`. Behind a load balancer or CDN,
 configure trusted proxies — without them every visitor shares the proxy's
@@ -251,9 +247,9 @@ publish them to `lang/vendor/phone-login`:
 php artisan vendor:publish --tag=phone-login-lang
 ```
 
-With SMSAPI, keep the SMS in GSM-7 — no `ą`, `ę`, `ó` and the like.
-`sms.smsapi.no_unicode` (on by default) makes SMSAPI reject anything else, and
-the form then shows a delivery error.
+With SMSAPI, keep the SMS in GSM-7 — no `ą`, `ę`, `ó` and the like. The
+package sends with SMSAPI's `no_unicode` flag, so SMSAPI rejects anything else
+and the form then shows a delivery error.
 
 ## Messages
 
@@ -276,7 +272,7 @@ class Customer extends Authenticatable
 }
 ```
 
-The number comes from the `columns.phone` column; a model without one throws a
+The number comes from the `phone` column; a model without one throws a
 `LogicException` rather than skipping the message. The SMS goes out at once,
 with no queue and no retries, and a failed delivery throws `SmsDeliveryFailed`
 for your code to handle. A link to a page behind `auth:phone` brings someone

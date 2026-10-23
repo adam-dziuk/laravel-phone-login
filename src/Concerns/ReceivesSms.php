@@ -4,13 +4,12 @@ namespace AdamDziuk\PhoneLogin\Concerns;
 
 use AdamDziuk\PhoneLogin\Contracts\SmsSender;
 use AdamDziuk\PhoneLogin\Exceptions\SmsDeliveryFailed;
-use AdamDziuk\PhoneLogin\PhoneLogin;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
 
 /**
  * Texts the user through the same SMS driver as the login codes, at the
- * number in the phone column from phone-login.columns.
+ * number in its phone column.
  *
  * @phpstan-require-extends Model
  */
@@ -24,11 +23,10 @@ trait ReceivesSms
      */
     public function sendMessage(string $message): void
     {
-        $column = (string) PhoneLogin::column('phone');
-        $phone = $this->getAttribute($column);
+        $phone = $this->getAttribute('phone');
 
         if (! is_string($phone) || $phone === '') {
-            throw new LogicException('Cannot text ['.static::class.'] '.$this->getKey().": it has no phone number in its [{$column}] column.");
+            throw new LogicException('Cannot text ['.static::class.'] '.$this->getKey().': it has no phone number.');
         }
 
         app(SmsSender::class)->send($phone, $message);

@@ -109,17 +109,6 @@ test('a missing view explains how to register one', function () {
     expect(fn () => $this->get(route('phone-login.login')))->toThrow(LogicException::class, 'PhoneLogin::loginView()');
 });
 
-test('the verified_at column can be switched off', function () {
-    config()->set('phone-login.columns.verified_at', null);
-    $sms = FakeSmsSender::bind();
-
-    sendCode();
-    verifyCode($sms->lastCode());
-
-    expect(PhoneUser::query()->sole()->phone_verified_at)->toBeNull();
-    $this->assertAuthenticated('phone');
-});
-
 test('codes are pruned after the retention window', function () {
     $code = fn (int $days) => (new PhoneLoginCode)->forceFill([
         'phone' => '+48060000002',

@@ -38,8 +38,8 @@ class PhoneUser extends Authenticatable
      */
     protected function casts(): array
     {
-        $verifiedAt = PhoneLogin::column('verified_at');
-
-        return $verifiedAt === null ? [] : [$verifiedAt => 'datetime'];
+        return [
+            'phone_verified_at' => 'datetime',
+        ];
     }
 }

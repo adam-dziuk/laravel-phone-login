@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Hash;
 
 class VerifyLoginCode
 {
+    private const MAX_ATTEMPTS = 5;
+
     /**
      * Signing up and signing in are the same path — an unknown number that
      * verifies gets an account, unless registration is turned off.
@@ -52,7 +54,7 @@ class VerifyLoginCode
     {
         return PhoneLoginCode::query()
             ->whereKey($login->getKey())
-            ->where('attempts', '<', (int) config('phone-login.code.max_attempts'))
+            ->where('attempts', '<', self::MAX_ATTEMPTS)
             ->increment('attempts') === 1;
     }
 
@@ -80,11 +82,8 @@ class VerifyLoginCode
      */
     private function user(string $phone): Authenticatable&Model
     {
-        $phoneColumn = (string) PhoneLogin::column('phone');
-        $verifiedColumn = PhoneLogin::column('verified_at');
-
         $model = PhoneLogin::userModel();
-        $user = $model::query()->where($phoneColumn, $phone)->first();
+        $user = $model::query()->where('phone', $phone)->first();
         $registered = $user === null;
 
         if ($user === null && ! config('phone-login.register_unknown')) {
@@ -93,13 +92,10 @@ class VerifyLoginCode
 
         $user = $user instanceof Authenticatable ? $user : PhoneLogin::newUser($phone);
 
-        $user->forceFill([$phoneColumn => $phone]);
-
-        if ($verifiedColumn !== null && $user->getAttribute($verifiedColumn) === null) {
-            $user->forceFill([$verifiedColumn => now()]);
-        }
-
-        $user->save();
+        $user->forceFill([
+            'phone' => $phone,
+            'phone_verified_at' => $user->getAttribute('phone_verified_at') ?? now(),
+        ])->save();
 
         event(new PhoneVerified($user, $registered));
 

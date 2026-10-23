@@ -62,7 +62,7 @@ test('refuses countries outside the allowed prefixes', function () {
 });
 
 test('allows any country when allowed prefixes is null', function () {
-    config()->set('phone-login.phone.allowed_prefixes', null);
+    config()->set('phone-login.allowed_prefixes', null);
 
     sendCode('+1 202 555 0143')->assertRedirect(route('phone-login.code'));
 
@@ -276,8 +276,8 @@ test('a number gets at most ten codes a day', function () {
     sendCode()->assertRedirect(route('phone-login.code'));
 });
 
-test('the whole app sends at most send_global_per_hour codes an hour', function () {
-    config()->set('phone-login.throttle.send_global_per_hour', 2);
+test('the whole app sends at most codes_per_hour codes an hour', function () {
+    config()->set('phone-login.codes_per_hour', 2);
 
     sendCode('+48060000002')->assertRedirect(route('phone-login.code'));
     sendCode('+48060000003')->assertRedirect(route('phone-login.code'));
@@ -286,26 +286,6 @@ test('the whole app sends at most send_global_per_hour codes an hour', function 
     $this->travel(1)->hours();
 
     sendCode('+48060000004')->assertRedirect(route('phone-login.code'));
-});
-
-test('a config published before the daily cap gets it too', function () {
-    config()->set('phone-login.throttle', ['send_per_phone' => 3, 'send_per_ip' => 15, 'verify_per_ip' => 6]);
-
-    foreach (range(1, 10) as $hour) {
-        sendCode()->assertRedirect(route('phone-login.code'));
-        $this->travel(1)->hours();
-    }
-
-    sendCode()->assertTooManyRequests();
-});
-
-test('null lifts the daily cap', function () {
-    config()->set('phone-login.throttle.send_per_phone_per_day', null);
-
-    foreach (range(1, 11) as $hour) {
-        sendCode()->assertRedirect(route('phone-login.code'));
-        $this->travel(1)->hours();
-    }
 });
 
 test('a failed delivery shows an error instead of a server error', function () {

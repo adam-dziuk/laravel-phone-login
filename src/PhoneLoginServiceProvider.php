@@ -20,7 +20,9 @@ class PhoneLoginServiceProvider extends ServiceProvider
         $this->registerGuard();
 
         $this->app->singleton(Hooks::class);
-        $this->app->bind(PhoneNumber::class, fn (): PhoneNumber => PhoneNumber::fromConfig());
+        $this->app->bind(PhoneNumber::class, fn (): PhoneNumber => new PhoneNumber(
+            allowedPrefixes: config('phone-login.allowed_prefixes'),
+        ));
         $this->app->bind(SmsSender::class, fn (): SmsSender => $this->smsSender());
     }
 
@@ -30,9 +32,7 @@ class PhoneLoginServiceProvider extends ServiceProvider
 
         $this->configureRateLimiting();
 
-        if (config('phone-login.routes.enabled')) {
-            $this->loadRoutesFrom(__DIR__.'/../routes/phone-login.php');
-        }
+        $this->loadRoutesFrom(__DIR__.'/../routes/phone-login.php');
 
         if ($this->app->runningInConsole()) {
             $this->configurePublishing();
@@ -73,6 +73,7 @@ class PhoneLoginServiceProvider extends ServiceProvider
      * Throttling runs before the form request normalises the number, so the
      * per-phone key normalises it here — otherwise every spelling of the same
      * number ("060000002", "+48 060 000 002", "0048…") would get its own bucket.
+     * Ten codes a day bound the guesses anyone can make at one number.
      */
     private function configureRateLimiting(): void
     {
@@ -81,31 +82,22 @@ class PhoneLoginServiceProvider extends ServiceProvider
             $phone = is_string($input) ? ($this->app->make(PhoneNumber::class)->normalise($input) ?? $input) : '';
 
             $limits = [
-                Limit::perHour((int) config('phone-login.throttle.send_per_phone'))->by('phone:'.$phone),
-                Limit::perHour((int) config('phone-login.throttle.send_per_ip'))->by('ip:'.$request->ip()),
+                Limit::perHour(3)->by('phone:'.$phone),
+                Limit::perDay(10)->by('phone-day:'.$phone),
+                Limit::perHour(15)->by('ip:'.$request->ip()),
             ];
 
-            // A config published before the daily cap has no such key and gets
-            // the default; only an explicit null lifts the cap.
-            $perDay = config('phone-login.throttle.send_per_phone_per_day', 10);
+            // Counts attempts, not delivered SMS.
+            $perHour = config('phone-login.codes_per_hour');
 
-            if ($perDay !== null) {
-                $limits[] = Limit::perDay((int) $perDay)->by('phone-day:'.$phone);
-            }
-
-            // Off unless set: no default would suit every app. It counts
-            // attempts, not delivered SMS.
-            $global = config('phone-login.throttle.send_global_per_hour');
-
-            if ($global !== null) {
-                $limits[] = Limit::perHour((int) $global)->by('global');
+            if ($perHour !== null) {
+                $limits[] = Limit::perHour((int) $perHour)->by('global');
             }
 
             return $limits;
         });
 
-        RateLimiter::for('phone-login-verify', fn (Request $request): Limit => Limit::perMinute((int) config('phone-login.throttle.verify_per_ip'))
-            ->by('ip:'.$request->ip()));
+        RateLimiter::for('phone-login-verify', fn (Request $request): Limit => Limit::perMinute(6)->by('ip:'.$request->ip()));
     }
 
     private function configurePublishing(): void

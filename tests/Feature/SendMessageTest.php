@@ -16,15 +16,6 @@ test('a phone user is texted at their own number', function () {
     ]);
 });
 
-test('the number comes from the configured phone column', function () {
-    config()->set('phone-login.columns.phone', 'mobile');
-    $sms = FakeSmsSender::bind();
-
-    (new PhoneUser)->forceFill(['mobile' => '+48060000003'])->sendMessage('Hello');
-
-    expect($sms->sent[0]['phone'])->toBe('+48060000003');
-});
-
 test('a failed delivery reaches the caller', function () {
     $this->app->instance(SmsSender::class, new class implements SmsSender
     {

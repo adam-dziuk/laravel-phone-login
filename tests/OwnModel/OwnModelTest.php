@@ -54,7 +54,7 @@ test('a model of the app own is texted once it uses the trait', function () {
 test('a user without a number throws instead of skipping the message', function () {
     $user = User::query()->forceCreate(['name' => 'No phone']);
 
-    expect(fn () => $user->sendMessage('Hello'))->toThrow(LogicException::class, 'no phone number in its [phone] column');
+    expect(fn () => $user->sendMessage('Hello'))->toThrow(LogicException::class, 'it has no phone number');
 
     expect($this->sms->sent)->toBeEmpty();
 });
