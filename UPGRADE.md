@@ -21,12 +21,14 @@ class Customer extends Authenticatable
 ```
 
 Then create a migration that converts both tables. Replace `customers` with
-your phone users' table, and add `nullable()` to `phone` if it was nullable:
+your phone users' table, and add `nullable()` to `phone` if it was nullable.
+Numbers are normalised to E.164 on the way, as the login looks them up:
 
 ```php
 <?php
 
 use AdamDziuk\PhoneLogin\PhoneLogin;
+use AdamDziuk\PhoneLogin\Support\PhoneNumber;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Crypt;
@@ -61,9 +63,11 @@ return new class extends Migration
         });
 
         DB::table('customers')->whereNotNull('phone')->lazyById()->each(function (object $row) {
+            $phone = app(PhoneNumber::class)->normalise($row->phone) ?? $row->phone;
+
             DB::table('customers')->where('id', $row->id)->update([
-                'phone' => Crypt::encryptString($row->phone),
-                'phone_hash' => PhoneLogin::phoneHash($row->phone),
+                'phone' => Crypt::encryptString($phone),
+                'phone_hash' => PhoneLogin::phoneHash($phone),
             ]);
         });
     }

@@ -93,6 +93,17 @@ test('an existing user logs into their own account', function () {
     $this->assertAuthenticatedAs($user->fresh(), 'phone');
 });
 
+test('a number saved as typed is found by the login', function () {
+    $user = PhoneUser::query()->forceCreate(['phone' => '060 000 002']);
+
+    sendCode();
+    verifyCode($this->sms->lastCode());
+
+    expect(PhoneUser::query()->count())->toBe(1)
+        ->and($user->fresh()->phone)->toBe('+48060000002');
+    $this->assertAuthenticatedAs($user->fresh(), 'phone');
+});
+
 test('logging in leads back to the page that sent the guest to the login form', function () {
     // Laravel builds the redirect to the staff login before any handler runs.
     Route::get('login', fn () => 'staff login form')->name('login');

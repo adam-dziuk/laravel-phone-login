@@ -130,13 +130,15 @@ final class PhoneLogin
     }
 
     /**
-     * What the users and codes tables find a number by. Keyed with APP_KEY,
-     * so a leaked database alone cannot be turned back into numbers; rotating
-     * APP_KEY changes every hash.
+     * What the users and codes tables find a number by. The HMAC key is
+     * derived from APP_KEY for this purpose alone, so no other HMAC made with
+     * APP_KEY, e.g. a signed URL, can stand in for a phone hash.
      */
     public static function phoneHash(string $phone): string
     {
-        return hash_hmac('sha256', $phone, (string) config('app.key'));
+        $key = hash_hkdf('sha256', (string) config('app.key'), 32, 'laravel-phone-login:phone_hash');
+
+        return hash_hmac('sha256', $phone, $key);
     }
 
     public static function newUser(string $phone): Authenticatable&Model

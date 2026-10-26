@@ -30,8 +30,7 @@
    ```
 
    Numbers are stored encrypted and found by a hash, both keyed with
-   `APP_KEY`. Rotating it changes every hash: known numbers would sign up as
-   new users.
+   `APP_KEY`. Before changing it, see [Rotating APP_KEY](#rotating-app_key).
 
 4. Register the views in a service provider:
 
@@ -93,3 +92,15 @@
 
    Schedule::command('model:prune', ['--model' => [PhoneLoginCode::class]])->daily();
    ```
+
+## Rotating APP_KEY
+
+Phone numbers and their hashes are keyed with `APP_KEY`. To rotate it:
+
+1. `php artisan down`
+2. Set the new `APP_KEY` and put the old one in `APP_PREVIOUS_KEYS`.
+3. Re-save every phone user, e.g. `PhoneUser::query()->lazyById()->each->save()`:
+   with previous keys set, Laravel re-encrypts the number and the trait
+   rehashes it.
+4. Remove `APP_PREVIOUS_KEYS` once the app's other encrypted data is converted.
+5. `php artisan up`
