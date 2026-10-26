@@ -18,15 +18,19 @@
 
    Already have a customer model? Skip the users migration, add a session
    guard for the model to `config/auth.php` (not the staff guard) and set
-   `guard` to its name. Its table needs fields: `phone` (unique `varchar(20)`),
-   `phone_verified_at` (nullable timestamp) and `remember_token`. Fill any
-   other required columns in a service provider:
+   `guard` to its name. Its table needs fields: `phone` (`text`), `phone_hash`
+   (unique `char(64)`), `phone_verified_at` (nullable timestamp) and
+   `remember_token`, and the model the `EncryptsPhone` trait. Fill any other
+   required columns in a service provider:
 
    ```php
    use AdamDziuk\PhoneLogin\PhoneLogin;
 
    PhoneLogin::createUsersUsing(fn (string $phone) => (new Customer)->forceFill(['name' => 'Guest']));
    ```
+
+   Numbers are stored encrypted and found by a hash, both keyed with
+   `APP_KEY`. Before changing it, see [Rotating APP_KEY](#rotating-app_key).
 
 4. Register the views in a service provider:
 
@@ -88,3 +92,15 @@
 
    Schedule::command('model:prune', ['--model' => [PhoneLoginCode::class]])->daily();
    ```
+
+## Rotating APP_KEY
+
+Phone numbers and their hashes are keyed with `APP_KEY`. To rotate it:
+
+1. `php artisan down`
+2. Set the new `APP_KEY` and put the old one in `APP_PREVIOUS_KEYS`.
+3. Re-save every phone user, e.g. `PhoneUser::query()->lazyById()->each->save()`:
+   with previous keys set, Laravel re-encrypts the number and the trait
+   rehashes it.
+4. Remove `APP_PREVIOUS_KEYS` once the app's other encrypted data is converted.
+5. `php artisan up`

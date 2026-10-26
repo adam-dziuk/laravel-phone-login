@@ -111,7 +111,7 @@ test('a missing view explains how to register one', function () {
 
 test('codes are pruned after the retention window', function () {
     $code = fn (int $days) => (new PhoneLoginCode)->forceFill([
-        'phone' => '+48060000002',
+        'phone_hash' => PhoneLogin::phoneHash('+48060000002'),
         'code_hash' => 'x',
         'expires_at' => now()->subDays($days),
         'created_at' => now()->subDays($days),

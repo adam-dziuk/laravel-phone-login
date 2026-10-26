@@ -2,6 +2,7 @@
 
 namespace AdamDziuk\PhoneLogin;
 
+use AdamDziuk\PhoneLogin\Concerns\EncryptsPhone;
 use AdamDziuk\PhoneLogin\Support\PhoneNumber;
 use Closure;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -120,7 +121,24 @@ final class PhoneLogin
             throw new LogicException('The ['.self::guard().'] guard must use an Eloquent provider with an authenticatable model.');
         }
 
+        // Without it the hash stays empty and every login would sign up anew.
+        if (! in_array(EncryptsPhone::class, class_uses_recursive($model), true)) {
+            throw new LogicException("[{$model}] must use the ".EncryptsPhone::class.' trait.');
+        }
+
         return $model;
+    }
+
+    /**
+     * What the users and codes tables find a number by. The HMAC key is
+     * derived from APP_KEY for this purpose alone, so no other HMAC made with
+     * APP_KEY, e.g. a signed URL, can stand in for a phone hash.
+     */
+    public static function phoneHash(string $phone): string
+    {
+        $key = hash_hkdf('sha256', (string) config('app.key'), 32, 'laravel-phone-login:phone_hash');
+
+        return hash_hmac('sha256', $phone, $key);
     }
 
     public static function newUser(string $phone): Authenticatable&Model

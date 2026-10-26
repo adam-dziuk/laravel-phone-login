@@ -15,7 +15,9 @@ return new class extends Migration
     {
         Schema::create(PhoneLogin::usersTable(), function (Blueprint $table) {
             $table->id();
-            $table->string('phone', 20)->unique();
+            // Encrypted, too long for a short string.
+            $table->text('phone');
+            $table->char('phone_hash', 64)->unique();
             $table->timestamp('phone_verified_at')->nullable();
             $table->rememberToken();
             $table->timestamps();

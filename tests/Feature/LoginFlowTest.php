@@ -4,6 +4,7 @@ use AdamDziuk\PhoneLogin\Contracts\SmsSender;
 use AdamDziuk\PhoneLogin\Exceptions\SmsDeliveryFailed;
 use AdamDziuk\PhoneLogin\Models\PhoneLoginCode;
 use AdamDziuk\PhoneLogin\Models\PhoneUser;
+use AdamDziuk\PhoneLogin\PhoneLogin;
 use AdamDziuk\PhoneLogin\Testing\FakeSmsSender;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -22,7 +23,7 @@ test('stores a hash of the code, never the code itself', function () {
     $code = $this->sms->lastCode();
 
     expect($code)->toHaveLength(6)
-        ->and($record->phone)->toBe('+48060000002')
+        ->and($record->phone_hash)->toBe(PhoneLogin::phoneHash('+48060000002'))
         ->and($record->code_hash)->not->toBe($code)
         ->and(Hash::check($code, $record->code_hash))->toBeTrue();
 });
@@ -39,7 +40,7 @@ test('texts the code together with its lifetime', function () {
 test('normalises the number to E.164', function () {
     sendCode('060 000 002');
 
-    expect(PhoneLoginCode::query()->sole()->phone)->toBe('+48060000002');
+    expect(PhoneLoginCode::query()->sole()->phone_hash)->toBe(PhoneLogin::phoneHash('+48060000002'));
 });
 
 test('rejects input that is not a phone number', function () {
@@ -66,7 +67,7 @@ test('allows any country when allowed prefixes is null', function () {
 
     sendCode('+1 202 555 0143')->assertRedirect(route('phone-login.code'));
 
-    expect(PhoneLoginCode::query()->sole()->phone)->toBe('+12025550143');
+    expect(PhoneLoginCode::query()->sole()->phone_hash)->toBe(PhoneLogin::phoneHash('+12025550143'));
 });
 
 test('a valid code signs an unknown number up and logs it in', function () {
@@ -74,7 +75,7 @@ test('a valid code signs an unknown number up and logs it in', function () {
 
     verifyCode($this->sms->lastCode())->assertRedirect('/home');
 
-    $user = PhoneUser::query()->where('phone', '+48069999999')->sole();
+    $user = PhoneUser::query()->where('phone_hash', PhoneLogin::phoneHash('+48069999999'))->sole();
 
     expect($user->phone_verified_at)->not->toBeNull();
     $this->assertAuthenticatedAs($user, 'phone');
@@ -89,6 +90,17 @@ test('an existing user logs into their own account', function () {
 
     expect(PhoneUser::query()->count())->toBe(1)
         ->and($user->fresh()->phone_verified_at->equalTo($verifiedAt))->toBeTrue();
+    $this->assertAuthenticatedAs($user->fresh(), 'phone');
+});
+
+test('a number saved as typed is found by the login', function () {
+    $user = PhoneUser::query()->forceCreate(['phone' => '060 000 002']);
+
+    sendCode();
+    verifyCode($this->sms->lastCode());
+
+    expect(PhoneUser::query()->count())->toBe(1)
+        ->and($user->fresh()->phone)->toBe('+48060000002');
     $this->assertAuthenticatedAs($user->fresh(), 'phone');
 });
 
