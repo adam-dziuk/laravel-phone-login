@@ -25,19 +25,21 @@ class SendLoginCode
      */
     public function handle(string $phone, ?string $ip = null): ?PhoneLoginCode
     {
-        if (! config('phone-login.register_unknown') && ! $this->hasAccount($phone)) {
+        $phoneHash = PhoneLogin::phoneHash($phone);
+
+        if (! config('phone-login.register_unknown') && ! $this->hasAccount($phoneHash)) {
             return null;
         }
 
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
         PhoneLoginCode::query()
-            ->where('phone', $phone)
+            ->where('phone_hash', $phoneHash)
             ->whereNull('consumed_at')
             ->update(['consumed_at' => now()]);
 
         $login = (new PhoneLoginCode)->forceFill([
-            'phone' => $phone,
+            'phone_hash' => $phoneHash,
             'code_hash' => Hash::make($code),
             'expires_at' => now()->addMinutes(self::TTL_MINUTES),
             'ip' => $ip,
@@ -53,10 +55,10 @@ class SendLoginCode
         return $login;
     }
 
-    private function hasAccount(string $phone): bool
+    private function hasAccount(string $phoneHash): bool
     {
         $model = PhoneLogin::userModel();
 
-        return $model::query()->where('phone', $phone)->exists();
+        return $model::query()->where('phone_hash', $phoneHash)->exists();
     }
 }

@@ -2,6 +2,7 @@
 
 namespace AdamDziuk\PhoneLogin;
 
+use AdamDziuk\PhoneLogin\Concerns\EncryptsPhone;
 use AdamDziuk\PhoneLogin\Support\PhoneNumber;
 use Closure;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -120,7 +121,22 @@ final class PhoneLogin
             throw new LogicException('The ['.self::guard().'] guard must use an Eloquent provider with an authenticatable model.');
         }
 
+        // Without it the hash stays empty and every login would sign up anew.
+        if (! in_array(EncryptsPhone::class, class_uses_recursive($model), true)) {
+            throw new LogicException("[{$model}] must use the ".EncryptsPhone::class.' trait.');
+        }
+
         return $model;
+    }
+
+    /**
+     * What the users and codes tables find a number by. Keyed with APP_KEY,
+     * so a leaked database alone cannot be turned back into numbers; rotating
+     * APP_KEY changes every hash.
+     */
+    public static function phoneHash(string $phone): string
+    {
+        return hash_hmac('sha256', $phone, (string) config('app.key'));
     }
 
     public static function newUser(string $phone): Authenticatable&Model

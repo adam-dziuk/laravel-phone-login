@@ -27,7 +27,7 @@ class VerifyLoginCode
     public function handle(string $phone, string $code, ?int $codeId = null): Authenticatable&Model
     {
         $login = PhoneLoginCode::query()
-            ->where('phone', $phone)
+            ->where('phone_hash', PhoneLogin::phoneHash($phone))
             ->when($codeId !== null, fn ($query) => $query->whereKey($codeId))
             ->whereNull('consumed_at')
             ->where('expires_at', '>', now())
@@ -83,7 +83,7 @@ class VerifyLoginCode
     private function user(string $phone): Authenticatable&Model
     {
         $model = PhoneLogin::userModel();
-        $user = $model::query()->where('phone', $phone)->first();
+        $user = $model::query()->where('phone_hash', PhoneLogin::phoneHash($phone))->first();
         $registered = $user === null;
 
         if ($user === null && ! config('phone-login.register_unknown')) {

@@ -3,6 +3,8 @@
 use AdamDziuk\PhoneLogin\Models\PhoneUser;
 use AdamDziuk\PhoneLogin\PhoneLogin;
 use AdamDziuk\PhoneLogin\Testing\FakeSmsSender;
+use Illuminate\Foundation\Auth\User;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -12,10 +14,16 @@ test('without a guard of its own the app gets one from the package', function ()
         ->and(PhoneLogin::userModel())->toBe(PhoneUser::class);
 });
 
+test('a user model without the EncryptsPhone trait is refused', function () {
+    config()->set('auth.providers.phone_login_users.model', User::class);
+
+    expect(fn () => PhoneLogin::userModel())->toThrow(LogicException::class, 'EncryptsPhone');
+});
+
 test('the users table is named in the config', function () {
     expect((new PhoneUser)->getTable())->toBe('sms_clients')
         ->and(Schema::hasTable('sms_clients'))->toBeTrue()
-        ->and(Schema::hasColumns('sms_clients', ['phone', 'phone_verified_at', 'remember_token']))->toBeTrue();
+        ->and(Schema::hasColumns('sms_clients', ['phone', 'phone_hash', 'phone_verified_at', 'remember_token']))->toBeTrue();
 });
 
 test('people who log in land in the named table', function () {
@@ -26,7 +34,8 @@ test('people who log in land in the named table', function () {
 
     $row = DB::table('sms_clients')->sole();
 
-    expect($row->phone)->toBe('+48060000002')
+    expect(Crypt::decryptString($row->phone))->toBe('+48060000002')
+        ->and($row->phone_hash)->toBe(PhoneLogin::phoneHash('+48060000002'))
         ->and($row->phone_verified_at)->not->toBeNull();
     $this->assertAuthenticatedAs(PhoneUser::query()->sole(), 'phone');
 });

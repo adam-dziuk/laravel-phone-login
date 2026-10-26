@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('phone_login_codes', function (Blueprint $table) {
             $table->id();
-            $table->string('phone', 20);
+            $table->char('phone_hash', 64);
             $table->string('code_hash');
             $table->timestamp('expires_at');
             $table->unsignedTinyInteger('attempts')->default(0);
@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('ip', 45)->nullable();
             $table->timestamp('created_at')->nullable();
 
-            $table->index(['phone', 'expires_at']);
+            $table->index(['phone_hash', 'expires_at']);
         });
     }
 

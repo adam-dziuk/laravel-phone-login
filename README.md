@@ -18,15 +18,20 @@
 
    Already have a customer model? Skip the users migration, add a session
    guard for the model to `config/auth.php` (not the staff guard) and set
-   `guard` to its name. Its table needs fields: `phone` (unique `varchar(20)`),
-   `phone_verified_at` (nullable timestamp) and `remember_token`. Fill any
-   other required columns in a service provider:
+   `guard` to its name. Its table needs fields: `phone` (`text`), `phone_hash`
+   (unique `char(64)`), `phone_verified_at` (nullable timestamp) and
+   `remember_token`, and the model the `EncryptsPhone` trait. Fill any other
+   required columns in a service provider:
 
    ```php
    use AdamDziuk\PhoneLogin\PhoneLogin;
 
    PhoneLogin::createUsersUsing(fn (string $phone) => (new Customer)->forceFill(['name' => 'Guest']));
    ```
+
+   Numbers are stored encrypted and found by a hash, both keyed with
+   `APP_KEY`. Rotating it changes every hash: known numbers would sign up as
+   new users.
 
 4. Register the views in a service provider:
 

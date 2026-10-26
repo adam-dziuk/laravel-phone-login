@@ -10,7 +10,8 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('phone', 20)->nullable()->unique();
+            $table->text('phone')->nullable();
+            $table->char('phone_hash', 64)->nullable()->unique();
             $table->string('name')->nullable();
             $table->timestamp('phone_verified_at')->nullable();
             $table->rememberToken();

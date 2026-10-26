@@ -10,10 +10,11 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Keyed by phone number rather than user id: on a first login there is no
  * user yet, and creating one before the code verifies would let anyone fill
- * the users table with random numbers.
+ * the users table with random numbers. The number is never read back from
+ * here, so only its hash is kept.
  *
  * @property int $id
- * @property string $phone
+ * @property string $phone_hash
  * @property string $code_hash
  * @property CarbonInterface $expires_at
  * @property int $attempts
@@ -30,7 +31,7 @@ class PhoneLoginCode extends Model
     protected $hidden = ['code_hash'];
 
     /**
-     * The phone number and IP address stay for 30 days, as long as they help
+     * The phone hash and IP address stay for 30 days, as long as they help
      * defend the login against abuse.
      *
      * @return Builder<static>
